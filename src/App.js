@@ -238,21 +238,7 @@ function App() {
       });
     });
 
-    socket.on('messageUpdated', ({ messageId, text, isDeleted }) => {
-      setMessages(prevMessages => 
-        prevMessages.map(msg => 
-          msg._id === messageId 
-            ? { ...msg, text, isDeleted }
-            : msg
-        )
-      );
-    });
-
-    socket.on('previousMessages', (messages) => {
-      setMessages(messages);
-    });
-
-    socket.on('messageDeleted', (messageId) => {
+    socket.on('messageDeleted', ({ messageId }) => {
       setMessages((prevMessages) => 
         prevMessages.map(msg => 
           msg._id === messageId 
@@ -262,8 +248,12 @@ function App() {
       );
     });
 
+    socket.on('previousMessages', (messages) => {
+      setMessages(messages);
+    });
+
     socket.on('deleteError', (error) => {
-      alert(error);
+      alert(error.message || 'Error deleting message');
     });
 
     socket.on('connect_error', (err) => {
@@ -283,7 +273,7 @@ function App() {
       socket.off('deleteError');
       socket.off('messageError');
     };
-  }, [socket]); // Keep socket as dependency
+  }, [socket]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -836,13 +826,19 @@ function App() {
       trackMouse: false
     });
 
-    // Add state for message deletion
-    const [isDeleted, setIsDeleted] = useState(false);
-
     const handleDelete = async (e) => {
       e.stopPropagation();
-      setIsDeleted(true);
-      onDelete(msg._id);
+
+      // Prompt for confirmation before deleting
+      const confirmDelete = window.confirm("Are you sure you want to delete this message?");
+      if (!confirmDelete) return;
+
+      try {
+        await onDelete(msg._id);
+      } catch (error) {
+        console.error('Error deleting message:', error);
+        alert('Failed to delete message.');
+      }
     };
 
     const handleMessageClick = () => {
@@ -930,10 +926,8 @@ function App() {
 
           {/* Message Content */}
           <div className="min-w-0">
-            {isDeleted ? (
-              <p className={`text-sm italic ${
-                msg.username === username ? 'text-white/70' : 'text-gray-500'
-              }`}>
+            {msg.type === 'deleted' ? (
+              <p className={`text-sm italic ${msg.username === username ? 'text-white/70' : 'text-gray-500'}`}>
                 This message was deleted
               </p>
             ) : msg.type === 'sticker' ? (
@@ -963,9 +957,7 @@ function App() {
                 <AudioPlayer audioUrl={msg.text} />
               </div>
             ) : (
-              <p className={`text-sm sm:text-base break-words ${
-                msg.username === username ? 'text-white/95' : 'text-gray-800'
-              }`}>
+              <p className={`text-sm sm:text-base break-words ${msg.username === username ? 'text-white/95' : 'text-gray-800'}`}>
                 {msg.text}
               </p>
             )}
@@ -1005,7 +997,8 @@ function App() {
   }, (prevProps, nextProps) => {
     return (
       prevProps.msg._id === nextProps.msg._id &&
-      prevProps.username === nextProps.username
+      prevProps.username === nextProps.username &&
+      prevProps.msg.type === nextProps.msg.type
     );
   });
 
