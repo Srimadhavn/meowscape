@@ -6,6 +6,7 @@ import './App.css';
 import './styles/patterns.css';
 import debounce from 'lodash/debounce';
 import { useSwipeable } from 'react-swipeable';
+import { motion } from 'framer-motion';
 
 // Configure axios defaults
 axios.defaults.withCredentials = false;
@@ -795,8 +796,15 @@ function App() {
 
     const isDeleted = msg.type === 'deleted';
 
+    // Add image loading optimization
+    const [isImageLoaded, setIsImageLoaded] = useState(false);
+
+    const handleImageLoad = useCallback(() => {
+      setIsImageLoaded(true);
+    }, []);
+
     return (
-      <div 
+      <motion.div
         {...handlers}
         className={`flex ${msg.username === username ? 'justify-end' : 'justify-start'} w-full mb-2 sm:mb-3 px-4 sm:px-8`}
       >
@@ -884,9 +892,17 @@ function App() {
                 <img 
                   src={msg.text} 
                   alt="shared"
-                  className="w-full h-auto max-h-[300px] object-contain"
+                  className={`w-full h-auto max-h-[300px] object-contain ${
+                    isImageLoaded ? 'opacity-100' : 'opacity-0'
+                  } transition-opacity duration-200`}
                   loading="lazy"
+                  onLoad={handleImageLoad}
                 />
+                {!isImageLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+                    <div className="w-8 h-8 border-2 border-love border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
               </div>
             ) : msg.type === 'audio' ? (
@@ -933,13 +949,14 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
     );
   }, (prevProps, nextProps) => {
     return (
       prevProps.msg._id === nextProps.msg._id &&
-      prevProps.username === nextProps.username &&
-      prevProps.msg.type === nextProps.msg.type
+      prevProps.msg.type === nextProps.msg.type &&
+      prevProps.msg.text === nextProps.msg.text &&
+      prevProps.username === nextProps.username
     );
   });
 
@@ -1303,7 +1320,7 @@ function App() {
         {/* Camera Controls */}
         <div className="p-6 flex justify-center">
           <button
-            onClick={handleCameraCapture}
+            onClick={handleCameraStart}
             className="w-16 h-16 rounded-full bg-white flex items-center justify-center"
             aria-label="Take photo"
           >
@@ -1496,6 +1513,31 @@ function App() {
   socket.on('connect_error', () => {
     console.log('Attempting to reconnect...');
   });
+
+  // Add these camera-related functions at the component level
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  }, [stream]);
+
+  const handleCameraStart = useCallback(async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      setStream(mediaStream);
+      setShowCamera(true);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      alert('Unable to access camera');
+    }
+  }, []);
 
   if (!isLoggedIn) {
     return (
