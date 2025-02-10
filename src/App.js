@@ -835,6 +835,7 @@ function App() {
 
       try {
         await onDelete(msg._id);
+        console.log(`Deletion requested for messageId: ${msg._id}`);
       } catch (error) {
         console.error('Error deleting message:', error);
         alert('Failed to delete message.');
@@ -857,6 +858,8 @@ function App() {
         }, 2000);
       }
     };
+
+    const isDeleted = msg.type === 'deleted';
 
     return (
       <div 
@@ -926,7 +929,7 @@ function App() {
 
           {/* Message Content */}
           <div className="min-w-0">
-            {msg.type === 'deleted' ? (
+            {isDeleted ? (
               <p className={`text-sm italic text-gray-500`}>
                 This message was deleted
               </p>
@@ -964,33 +967,35 @@ function App() {
           </div>
 
           {/* Action Buttons - Updated visibility for mobile/desktop */}
-          <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 
-            group-hover:opacity-100 
-            md:group-hover:opacity-100 
-            md:opacity-0
-            sm:group-hover:opacity-100 
-            active:opacity-100 
-            transition-opacity
-            touch-device:hidden"
-          >
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onReply(msg);
-              }}
-              className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
+          {!isDeleted && (
+            <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 
+              group-hover:opacity-100 
+              md:group-hover:opacity-100 
+              md:opacity-0
+              sm:group-hover:opacity-100 
+              active:opacity-100 
+              transition-opacity
+              touch-device:hidden"
             >
-              <Reply className="w-4 h-4 text-gray-500" />
-            </button>
-            {msg.username === username && (
               <button 
-                onClick={handleDelete}
-                className="p-2 bg-white rounded-full shadow-md hover:bg-red-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onReply(msg);
+                }}
+                className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
               >
-                <Trash2 className="w-4 h-4 text-red-500" />
+                <Reply className="w-4 h-4 text-gray-500" />
               </button>
-            )}
-          </div>
+              {msg.username === username && (
+                <button 
+                  onClick={handleDelete}
+                  className="p-2 bg-white rounded-full shadow-md hover:bg-red-50"
+                >
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1602,13 +1607,13 @@ function App() {
 
       {/* Scroll to Bottom Button */}
       {showScrollButton && (
-                  <button 
+        <button 
           onClick={scrollToBottom}
           className="fixed bottom-[100px] right-4 sm:right-8 bg-love text-white p-2 rounded-full shadow-lg hover:bg-love-dark transition-colors z-20"
-                  >
+        >
           <ChevronDown className="w-5 h-5" />
-                  </button>
-                )}
+        </button>
+      )}
 
       {/* Typing indicator */}
       {typingUsers.length > 0 && (
@@ -1647,7 +1652,7 @@ function App() {
               <div className="flex-1 bg-gray-100 rounded-2xl p-2">
                 <textarea
                   ref={inputRef}
-              value={message}
+                  value={message}
                   onChange={handleMessageInput}
                   onKeyPress={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1701,14 +1706,14 @@ function App() {
                   )}
                 </button>
 
-            <button
-              onClick={sendMessage}
+                <button
+                  onClick={sendMessage}
                   className="bg-love hover:bg-love-dark text-white px-4 py-2 rounded-lg transition-colors"
-            >
+                >
                   <Send className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
