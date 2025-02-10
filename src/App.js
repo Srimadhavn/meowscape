@@ -447,8 +447,8 @@ function App() {
     }
   };
 
-  const ImagePreview = ({ image, onSend, onCancel }) => {
-    return (
+  const ImagePreview = useMemo(() => {
+    return ({ image, onSend, onCancel }) => (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-30 p-4">
         <div className="bg-white rounded-xl max-w-lg w-full">
           <div className="p-4 border-b flex justify-between items-center">
@@ -488,7 +488,7 @@ function App() {
         </div>
       </div>
     );
-  };
+  }, []);
 
   const sendMessage = async () => {
     if (message.trim() || selectedImage || selectedSticker) {
@@ -605,7 +605,7 @@ function App() {
     }
   };
 
-  const handleImageSelect = async (event) => {
+  const handleImageSelect = useCallback(async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -620,98 +620,17 @@ function App() {
       return;
     }
 
-    // Create preview
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreview(e.target.result);
-      setSelectedImage(file);
-      setShowImageUpload(true);
-    };
-    reader.readAsDataURL(file);
-  };
+    // Create preview using URL.createObjectURL instead of FileReader
+    const previewUrl = URL.createObjectURL(file);
+    setImagePreview(previewUrl);
+    setSelectedImage(file);
+    setShowImageUpload(true);
 
-  const handleCameraStart = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: {
-          facingMode: 'environment', // Use back camera if available
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        } 
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setShowCamera(true);
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Failed to access camera. Please make sure you have granted camera permissions.');
-    }
-  };
+    // Cleanup the object URL when preview is no longer needed
+    return () => URL.revokeObjectURL(previewUrl);
+  }, []);
 
-  const handleCameraCapture = () => {
-    if (!videoRef.current) return;
-
-    const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    
-    // Set canvas size to match video dimensions
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
-    // Draw the video frame to canvas
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    
-    // Convert to blob
-    canvas.toBlob(async (blob) => {
-      if (!blob) {
-        alert('Failed to capture image');
-        return;
-      }
-
-      try {
-        const formData = new FormData();
-        formData.append('image', blob, 'camera-capture.jpg');
-
-        const response = await axios.post(`${API_URL}/api/upload-image`, formData, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
-
-        // Send message with captured image
-    const messageData = {
-      username,
-          text: response.data.url,
-          type: 'image',
-          timestamp: new Date(),
-          replyTo: replyingTo || null
-    };
-    
-    socket.emit('sendMessage', messageData);
-        
-        // Clean up
-        stopCamera();
-        setShowCamera(false);
-        setReplyingTo(null);
-      } catch (error) {
-        console.error('Error uploading camera image:', error);
-        alert('Failed to upload image');
-      }
-    }, 'image/jpeg', 0.8);
-  };
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const handleImageUpload = async () => {
+  const handleImageUpload = useCallback(async () => {
     if (!selectedImage) return;
 
     try {
@@ -736,7 +655,11 @@ function App() {
         } : null
       };
 
+      // Emit message before updating state
       socket.emit('sendMessage', messageData);
+      playSound.send();
+
+      // Batch state updates
       setSelectedImage(null);
       setImagePreview(null);
       setShowImageUpload(false);
@@ -747,7 +670,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedImage, username, replyingTo, socket, playSound]);
 
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
