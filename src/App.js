@@ -238,7 +238,7 @@ function App() {
       });
     });
 
-    socket.on('messageDeleted', ({ messageId }) => {
+    socket.on('messageDeleted', (messageId) => {
       setMessages((prevMessages) => 
         prevMessages.map(msg => 
           msg._id === messageId 
@@ -927,7 +927,7 @@ function App() {
           {/* Message Content */}
           <div className="min-w-0">
             {msg.type === 'deleted' ? (
-              <p className={`text-sm italic ${msg.username === username ? 'text-white/70' : 'text-gray-500'}`}>
+              <p className={`text-sm italic text-gray-500`}>
                 This message was deleted
               </p>
             ) : msg.type === 'sticker' ? (
