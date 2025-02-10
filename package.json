@@ -1,0 +1,47 @@
+{
+  "name": "client",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@tailwindcss/forms": "^0.5.10",
+    "axios": "^1.7.9",
+    "cra-template": "1.2.0",
+    "framer-motion": "^12.4.1",
+    "lucide-react": "^0.474.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-scripts": "5.0.1",
+    "react-swipeable": "^7.0.2",
+    "shadcn-ui": "^0.9.4",
+    "socket.io-client": "^4.8.1",
+    "tailwindcss-animate": "^1.0.7",
+    "web-vitals": "^4.2.4",
+    "workbox-webpack-plugin": "^7.3.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "GENERATE_SOURCEMAP=false react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "build:android": "react-scripts build && npx cap sync android",
+    "build:ios": "react-scripts build && npx cap sync ios"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

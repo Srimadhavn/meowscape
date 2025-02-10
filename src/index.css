@@ -1,0 +1,114 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+@keyframes highlight {
+  0% { 
+    background-color: rgba(255, 192, 203, 0.3);
+    transform: translateZ(0) scale(1.02);
+  }
+  100% { 
+    background-color: transparent;
+    transform: translateZ(0) scale(1);
+  }
+}
+
+.highlight-message {
+  animation: highlight 2s ease-out;
+}
+
+.message-gradient {
+  background: linear-gradient(135deg, rgba(255, 99, 132, 0.85), rgba(255, 71, 87, 0.8));
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.message-white {
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.reply-preview {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.reply-preview-light {
+  background: rgba(243, 244, 246, 1);
+  border: 1px solid rgba(229, 231, 235, 1);
+}
+
+/* Add these performance optimizations */
+.chat-container {
+  -webkit-overflow-scrolling: touch;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.message-animation {
+  will-change: transform, opacity;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+/* Add smooth scrolling utilities */
+.scroll-smooth {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Add performance classes */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+.optimize-animation {
+  will-change: transform, opacity;
+}
+
+/* Add these utility classes */
+@media (hover: none) {
+  .touch-device\:hidden {
+    display: none;
+  }
+}
+
+.message-deleted {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Add touch device detection */
+@media (hover: none) and (pointer: coarse) {
+  .mobile-swipe-hint {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .group:active .mobile-swipe-hint {
+    opacity: 1;
+  }
+}

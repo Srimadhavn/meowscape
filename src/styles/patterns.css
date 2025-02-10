@@ -1,0 +1,28 @@
+.bg-pattern-love {
+  background-image: url('../assets/love-pattern.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+/* Add these utility classes for sticker panel */
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #f7f7f7;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(239, 68, 68, 0.5);
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(239, 68, 68, 0.7);
+} 
