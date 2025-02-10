@@ -239,7 +239,7 @@ function App() {
     });
 
     socket.on('messageDeleted', (messageId) => {
-      setMessages((prevMessages) => 
+      setMessages(prevMessages => 
         prevMessages.map(msg => 
           msg._id === messageId 
             ? { ...msg, type: 'deleted', text: 'This message was deleted' }
@@ -253,6 +253,7 @@ function App() {
     });
 
     socket.on('deleteError', (error) => {
+      fetchMessages();
       alert(error.message || 'Error deleting message');
     });
 
@@ -521,9 +522,24 @@ function App() {
 
   const handleDeleteMessage = useCallback(async (messageId) => {
     try {
-        socket.emit('deleteMessage', { messageId, username });
+      // Prompt for confirmation before deleting
+      const confirmDelete = window.confirm("Are you sure you want to delete this message?");
+      if (!confirmDelete) return;
+
+      // Optimistically update the UI
+      setMessages(prevMessages => 
+        prevMessages.map(msg => 
+          msg._id === messageId 
+            ? { ...msg, type: 'deleted', text: 'This message was deleted' }
+            : msg
+        )
+      );
+
+      // Emit delete event to server
+      socket.emit('deleteMessage', { messageId, username });
     } catch (error) {
       console.error('Error deleting message:', error);
+      alert('Failed to delete message');
     }
   }, [socket, username]);
 
