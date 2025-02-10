@@ -809,34 +809,24 @@ function App() {
     }, 100);
   };
 
-  // Update the handleReplyClick function
-  const handleReplyClick = (replyId) => {
-    if (!replyId) return;
-    
-    // Find the original message element
-    const originalMessage = document.querySelector(`[data-message-id="${replyId}"]`);
-    if (!originalMessage || !chatContainerRef.current) return;
-
-    // Scroll the original message into view
-    chatContainerRef.current.scrollTo({
-      top: originalMessage.offsetTop - chatContainerRef.current.clientHeight / 3,
-      behavior: 'smooth'
-    });
-
-    // Add highlight effect to the original message
-    originalMessage.style.backgroundColor = '#FFE4E4'; // Light red background
-    originalMessage.style.transition = 'background-color 0.3s ease';
-
-    // Remove highlight after animation
-    setTimeout(() => {
-      originalMessage.style.backgroundColor = '';
-    }, 1500);
+  // Update the handleReply function
+  const handleReply = (message) => {
+    // Don't allow replies to deleted messages
+    if (message.type === 'deleted') {
+      return; // Simply return without setting replyingTo
+    }
+    setReplyingTo(message);
   };
 
   // Now define the Message component with access to scrollToMessage
   const Message = React.memo(({ msg, username, onReply, onDelete }) => {
     const handlers = useSwipeable({
-      onSwipedRight: () => onReply(msg),
+      onSwipedRight: () => {
+        // Don't allow swipe to reply for deleted messages
+        if (msg.type !== 'deleted') {
+          onReply(msg);
+        }
+      },
       delta: 30,
       preventDefaultTouchmoveEvent: true,
       trackMouse: false
@@ -935,9 +925,10 @@ function App() {
           {/* Message Content */}
           <div className="min-w-0">
             {isDeleted ? (
-              <p className={`text-sm italic text-gray-500`}>
-                This message was deleted
-              </p>
+              <div className="text-gray-500 italic flex items-center gap-2">
+                <span>This message was deleted</span>
+                <span className="text-xs">(cannot be replied to)</span>
+              </div>
             ) : msg.type === 'sticker' ? (
               <div className="w-20 h-20 xs:w-24 xs:h-24 sm:w-28 sm:h-28 flex items-center justify-center">
                 <img 
@@ -982,15 +973,17 @@ function App() {
               transition-opacity
               touch-device:hidden"
             >
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReply(msg);
-                }}
-                className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
-              >
-                <Reply className="w-4 h-4 text-gray-500" />
-              </button>
+              {msg.type !== 'deleted' && username === msg.username && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReply(msg);
+                  }}
+                  className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
+                >
+                  <Reply className="w-4 h-4 text-gray-500" />
+                </button>
+              )}
               {msg.username === username && (
                 <button 
                   onClick={handleDelete}
@@ -1148,11 +1141,6 @@ function App() {
       socket.emit('stopTyping');
     }
   }, [debouncedTyping, socket]);
-
-  const handleReply = (message) => {
-    setReplyingTo(message);
-    inputRef.current?.focus();
-  };
 
   const StickerPicker = ({ onSelect, onClose }) => {
     const [selectedPack, setSelectedPack] = useState('Recent');
@@ -1459,8 +1447,7 @@ function App() {
     const [isSending, setIsSending] = useState(false);
 
     const handleSend = async () => {
-      if (isSending) return; // Prevent double-sending
-      
+      if (isSending) return;
       setIsSending(true);
       try {
         await onSend();
@@ -1471,8 +1458,8 @@ function App() {
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl max-w-sm w-full p-4">
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
+        <div className="bg-white rounded-xl max-w-sm w-full p-4 relative">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold">Send Voice Message</h3>
             <button 
@@ -1676,7 +1663,7 @@ function App() {
       {showScrollButton && (
         <button 
           onClick={scrollToBottom}
-          className="fixed bottom-[100px] right-4 sm:right-8 bg-love text-white p-2 rounded-full shadow-lg hover:bg-love-dark transition-colors z-20"
+          className="fixed bottom-[120px] right-4 sm:right-8 bg-love text-white p-2.5 rounded-full shadow-lg hover:bg-love-dark transition-colors z-30"
         >
           <ChevronDown className="w-5 h-5" />
         </button>
@@ -1701,7 +1688,7 @@ function App() {
       )}
 
       {/* Input area */}
-      <div className="sticky bottom-0 bg-white border-t shadow-lg z-20">
+      <div className="sticky bottom-0 bg-white border-t shadow-lg z-25">
         <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2">
           <div className="flex flex-col gap-2">
             {/* Input area */}
