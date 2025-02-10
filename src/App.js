@@ -149,6 +149,17 @@ function App() {
     'Varsha': 'maddy'
   };
 
+  const [playSound] = useState(() => {
+    const sendAudio = new Audio('/sounds/send.mp3');
+    const receiveAudio = new Audio('/sounds/receive.mp3');
+    const deleteAudio = new Audio('/sounds/delete.mp3');
+    
+    return {
+      send: () => sendAudio.play().catch(() => {}),
+      receive: () => receiveAudio.play().catch(() => {}),
+      delete: () => deleteAudio.play().catch(() => {})
+    };
+  });
 
   const debouncedTyping = useMemo(() => 
     debounce((typing) => {
@@ -238,14 +249,15 @@ function App() {
       });
     });
 
-    socket.on('messageDeleted', (messageId) => {
+    socket.on('messageDeleted', ({ messageId }) => {
       setMessages(prevMessages => 
         prevMessages.map(msg => 
-          msg._id === messageId 
+          msg._id === messageId && msg.type !== 'deleted'
             ? { ...msg, type: 'deleted', text: 'This message was deleted' }
             : msg
         )
       );
+      playSound.delete();
     });
 
     socket.on('previousMessages', (messages) => {
@@ -274,7 +286,7 @@ function App() {
       socket.off('deleteError');
       socket.off('messageError');
     };
-  }, [socket]);
+  }, [socket, playSound]);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -522,11 +534,10 @@ function App() {
 
   const handleDeleteMessage = useCallback(async (messageId) => {
     try {
-      // Single confirmation prompt
       const confirmDelete = window.confirm("Are you sure you want to delete this message?");
       if (!confirmDelete) return;
 
-      // Optimistically update the UI
+      // Immediately update UI first
       setMessages(prevMessages => 
         prevMessages.map(msg => 
           msg._id === messageId 
@@ -534,14 +545,19 @@ function App() {
             : msg
         )
       );
+      
+      // Play delete sound
+      playSound.delete();
 
-      // Emit delete event to server
+      // Then emit to server (don't await)
       socket.emit('deleteMessage', { messageId, username });
+
     } catch (error) {
       console.error('Error deleting message:', error);
-      alert('Failed to delete message');
+      // Optionally revert the UI if there's an error
+      // alert('Failed to delete message');
     }
-  }, [socket, username]);
+  }, [socket, username, playSound]);
 
   const sendSticker = (stickerUrl) => {
     console.log('Sending sticker:', stickerUrl);
