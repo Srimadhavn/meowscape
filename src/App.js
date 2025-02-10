@@ -927,7 +927,6 @@ function App() {
             {isDeleted ? (
               <div className="text-gray-500 italic flex items-center gap-2">
                 <span>This message was deleted</span>
-                <span className="text-xs">(cannot be replied to)</span>
               </div>
             ) : msg.type === 'sticker' ? (
               <div className="w-20 h-20 xs:w-24 xs:h-24 sm:w-28 sm:h-28 flex items-center justify-center">
