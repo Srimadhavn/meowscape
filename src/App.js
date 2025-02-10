@@ -98,6 +98,9 @@ const AudioPlayer = React.memo(({ audioUrl }) => {
   );
 });
 
+// Add this at the top level, outside of any component
+const IMAGE_CACHE = new Map();
+
 function App() {
   const socket = useMemo(() => {
     const socketUrl = process.env.REACT_APP_SOCKET_URL.replace(/^\/\//, 'https://');
@@ -760,6 +763,63 @@ function App() {
 
   // Now define the Message component with access to scrollToMessage
   const Message = React.memo(({ msg, username, onReply, onDelete }) => {
+    const [imageLoaded, setImageLoaded] = useState(() => IMAGE_CACHE.has(msg.text));
+    const imageRef = useRef(null);
+
+    useEffect(() => {
+      if (msg.type === 'image' && !IMAGE_CACHE.has(msg.text)) {
+        const img = new Image();
+        
+        img.onload = () => {
+          IMAGE_CACHE.set(msg.text, true);
+          setImageLoaded(true);
+        };
+        
+        img.src = msg.text;
+
+        return () => {
+          img.onload = null;
+        };
+      }
+    }, [msg.type, msg.text]);
+
+    const renderMessageContent = () => {
+      if (msg.type === 'image') {
+        return (
+          <div className="relative rounded-lg overflow-hidden bg-gray-100">
+            {!imageLoaded && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-8 h-8 border-2 border-love border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {imageLoaded && (
+              <img
+                ref={imageRef}
+                src={msg.text}
+                alt="shared"
+                className="w-full h-auto max-h-[300px] object-contain"
+                style={{ 
+                  transform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden',
+                  contain: 'paint'
+                }}
+              />
+            )}
+          </div>
+        );
+      }
+      
+      if (msg.type === 'deleted') {
+        return <span className="italic text-gray-500">This message was deleted</span>;
+      }
+      
+      if (msg.type === 'audio') {
+        return <AudioPlayer audioUrl={msg.text} />;
+      }
+      
+      return <span>{msg.text}</span>;
+    };
+
     const handlers = useSwipeable({
       onSwipedRight: () => {
         // Don't allow swipe to reply for deleted messages
@@ -796,17 +856,15 @@ function App() {
 
     const isDeleted = msg.type === 'deleted';
 
-    // Add image loading optimization
-    const [isImageLoaded, setIsImageLoaded] = useState(false);
-
-    const handleImageLoad = useCallback(() => {
-      setIsImageLoaded(true);
-    }, []);
-
     return (
-      <motion.div
+      <div
         {...handlers}
         className={`flex ${msg.username === username ? 'justify-end' : 'justify-start'} w-full mb-2 sm:mb-3 px-4 sm:px-8`}
+        style={{ 
+          transform: 'translateZ(0)',
+          willChange: 'transform',
+          contain: 'layout style paint'
+        }}
       >
         <div 
           onClick={handleMessageClick}
@@ -871,49 +929,7 @@ function App() {
 
           {/* Message Content */}
           <div className="min-w-0">
-            {isDeleted ? (
-              <div className="text-gray-500 italic flex items-center gap-2">
-                <span>This message was deleted</span>
-              </div>
-            ) : msg.type === 'sticker' ? (
-              <div className="w-20 h-20 xs:w-24 xs:h-24 sm:w-28 sm:h-28 flex items-center justify-center">
-                <img 
-                  src={msg.text} 
-                  alt="sticker"
-                  className="max-w-full max-h-full object-contain"
-                  loading="lazy"
-                />
-              </div>
-            ) : msg.type === 'image' ? (
-              <div 
-                className="relative max-w-full rounded-lg overflow-hidden cursor-pointer group"
-                onClick={() => window.open(msg.text, '_blank')}
-              >
-                <img 
-                  src={msg.text} 
-                  alt="shared"
-                  className={`w-full h-auto max-h-[300px] object-contain ${
-                    isImageLoaded ? 'opacity-100' : 'opacity-0'
-                  } transition-opacity duration-200`}
-                  loading="lazy"
-                  onLoad={handleImageLoad}
-                />
-                {!isImageLoaded && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-                    <div className="w-8 h-8 border-2 border-love border-t-transparent rounded-full animate-spin" />
-                  </div>
-                )}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-              </div>
-            ) : msg.type === 'audio' ? (
-              <div className="max-w-full">
-                <AudioPlayer audioUrl={msg.text} />
-              </div>
-            ) : (
-              <p className={`text-sm sm:text-base break-words ${msg.username === username ? 'text-white/95' : 'text-gray-800'}`}>
-                {msg.text}
-              </p>
-            )}
+            {renderMessageContent()}
           </div>
 
           {/* Action Buttons - Updated visibility for mobile/desktop */}
@@ -949,7 +965,7 @@ function App() {
             </div>
           )}
         </div>
-      </motion.div>
+      </div>
     );
   }, (prevProps, nextProps) => {
     return (
@@ -1622,11 +1638,13 @@ function App() {
         <div className="h-full max-w-6xl mx-auto w-full p-2 sm:p-4 pb-[25px] sm:pb-[30px] absolute inset-0">
           <div 
             ref={chatContainerRef}
-            className="h-full overflow-y-auto overscroll-y-contain rounded-xl sm:rounded-2xl p-2 sm:p-4 space-y-3 sm:space-y-4"
+            className="h-full overflow-y-auto overscroll-y-contain"
             style={{ 
               WebkitOverflowScrolling: 'touch',
+              transform: 'translateZ(0)',
               willChange: 'transform',
-              transform: 'translateZ(0)'
+              contain: 'paint layout style',
+              scrollBehavior: 'smooth'
             }}
           >
             {isLoadingMore && (
