@@ -522,7 +522,7 @@ function App() {
 
   const handleDeleteMessage = useCallback(async (messageId) => {
     try {
-      // Prompt for confirmation before deleting
+      // Single confirmation prompt
       const confirmDelete = window.confirm("Are you sure you want to delete this message?");
       if (!confirmDelete) return;
 
@@ -842,20 +842,9 @@ function App() {
       trackMouse: false
     });
 
-    const handleDelete = async (e) => {
+    const handleDelete = (e) => {
       e.stopPropagation();
-
-      // Prompt for confirmation before deleting
-      const confirmDelete = window.confirm("Are you sure you want to delete this message?");
-      if (!confirmDelete) return;
-
-      try {
-        await onDelete(msg._id);
-        console.log(`Deletion requested for messageId: ${msg._id}`);
-      } catch (error) {
-        console.error('Error deleting message:', error);
-        alert('Failed to delete message.');
-      }
+      onDelete(msg._id); // Remove the confirmation here since it's in handleDeleteMessage
     };
 
     const handleMessageClick = () => {
@@ -1235,11 +1224,25 @@ function App() {
 
   const startRecording = async () => {
     try {
+      // First check if we have permission
+      if (navigator.permissions && navigator.permissions.query) {
+        const result = await navigator.permissions.query({ name: 'microphone' });
+        if (result.state === 'denied') {
+          alert('Please enable microphone access in your browser settings');
+          return;
+        }
+      }
+
+      // Add more flexible constraints for mobile devices
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          // Add these settings for better mobile compatibility
+          channelCount: 1,
+          sampleRate: 44100,
+          sampleSize: 16
         } 
       });
       
@@ -1247,7 +1250,7 @@ function App() {
       audioChunksRef.current = [];
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm'
+        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
       });
       
       recorder.ondataavailable = (e) => {
@@ -1256,11 +1259,18 @@ function App() {
         }
       };
       
+      recorder.onerror = (e) => {
+        console.error('MediaRecorder error:', e);
+        alert('Error recording audio. Please try again.');
+        stopRecording();
+      };
+      
       recorder.onstop = async () => {
         try {
-          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const audioBlob = new Blob(audioChunksRef.current, { 
+            type: recorder.mimeType
+          });
           
-          // Create preview URL
           const audioUrl = URL.createObjectURL(audioBlob);
           setAudioPreview({
             url: audioUrl,
@@ -1277,20 +1287,41 @@ function App() {
       setMediaRecorder(recorder);
       setIsRecording(true);
     } catch (error) {
-      console.error('Error starting recording:', error);
-      alert('Could not access microphone');
+      console.error('Detailed recording error:', error);
+      
+      // More specific error messages
+      if (error.name === 'NotAllowedError') {
+        alert('Microphone access was denied. Please check your device permissions.');
+      } else if (error.name === 'NotFoundError') {
+        alert('No microphone found. Please ensure your device has a working microphone.');
+      } else if (error.name === 'NotReadableError') {
+        alert('Could not access your microphone. Please try closing other apps that might be using it.');
+      } else {
+        alert('Could not access microphone. Please check your device settings and try again.');
+      }
+      
+      setIsRecording(false);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.stop();
+    try {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+      }
+      
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => {
+          track.stop();
+          audioStream.removeTrack(track);
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping recording:', error);
+    } finally {
       setIsRecording(false);
-    }
-    
-    if (audioStream) {
-      audioStream.getTracks().forEach(track => track.stop());
       setAudioStream(null);
+      setMediaRecorder(null);
     }
   };
 
