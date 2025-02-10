@@ -1233,13 +1233,12 @@ function App() {
         }
       }
 
-      // Add more flexible constraints for mobile devices
+      // Add more flexible constraints specifically for mobile
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
-          // Add these settings for better mobile compatibility
           channelCount: 1,
           sampleRate: 44100,
           sampleSize: 16
@@ -1249,55 +1248,70 @@ function App() {
       setAudioStream(stream);
       audioChunksRef.current = [];
       
+      // Check for supported MIME types
+      let mimeType = 'audio/webm';
+      if (!MediaRecorder.isTypeSupported('audio/webm')) {
+        mimeType = 'audio/mp4';
+        if (!MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = ''; // Let the browser choose the best format
+        }
+      }
+      
       const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4'
+        mimeType: mimeType || undefined,
+        audioBitsPerSecond: 128000
       });
       
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data && e.data.size > 0) {
           audioChunksRef.current.push(e.data);
         }
       };
       
       recorder.onerror = (e) => {
         console.error('MediaRecorder error:', e);
-        alert('Error recording audio. Please try again.');
+        // Don't show alert here, just log the error
         stopRecording();
       };
       
       recorder.onstop = async () => {
         try {
-          const audioBlob = new Blob(audioChunksRef.current, { 
-            type: recorder.mimeType
-          });
-          
-          const audioUrl = URL.createObjectURL(audioBlob);
-          setAudioPreview({
-            url: audioUrl,
-            blob: audioBlob
-          });
-          
+          if (audioChunksRef.current.length > 0) {
+            const audioBlob = new Blob(audioChunksRef.current, { 
+              type: mimeType || 'audio/webm' 
+            });
+            
+            const audioUrl = URL.createObjectURL(audioBlob);
+            setAudioPreview({
+              url: audioUrl,
+              blob: audioBlob
+            });
+          }
         } catch (error) {
           console.error('Error creating audio preview:', error);
-          alert('Failed to create audio preview');
+          // Don't show alert here
         }
       };
 
-      recorder.start();
+      // Start recording with smaller time slices for mobile
+      recorder.start(200); // 200ms chunks
       setMediaRecorder(recorder);
       setIsRecording(true);
     } catch (error) {
-      console.error('Detailed recording error:', error);
+      console.error('Recording error:', error);
       
-      // More specific error messages
-      if (error.name === 'NotAllowedError') {
+      if (error.name === 'AbortError') {
+        console.log('Recording was aborted, retrying...');
+        setIsRecording(false);
+      } else if (error.name === 'NotAllowedError') {
         alert('Microphone access was denied. Please check your device permissions.');
       } else if (error.name === 'NotFoundError') {
         alert('No microphone found. Please ensure your device has a working microphone.');
       } else if (error.name === 'NotReadableError') {
         alert('Could not access your microphone. Please try closing other apps that might be using it.');
       } else {
-        alert('Could not access microphone. Please check your device settings and try again.');
+        // Don't show generic error alert
+        console.error('Microphone error:', error);
       }
       
       setIsRecording(false);
@@ -1308,13 +1322,14 @@ function App() {
     try {
       if (mediaRecorder && mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
-      }
-      
-      if (audioStream) {
-        audioStream.getTracks().forEach(track => {
-          track.stop();
-          audioStream.removeTrack(track);
-        });
+        // Add a small delay before cleaning up the stream
+        setTimeout(() => {
+          if (audioStream) {
+            audioStream.getTracks().forEach(track => {
+              track.stop();
+            });
+          }
+        }, 100);
       }
     } catch (error) {
       console.error('Error stopping recording:', error);
@@ -1439,14 +1454,20 @@ function App() {
     ));
   }, [messages, username, handleReply, handleDeleteMessage]);
 
-  // Add AudioPreviewModal component
+  // Update the AudioPreviewModal component
   const AudioPreviewModal = ({ audioUrl, onSend, onCancel }) => {
     const [isSending, setIsSending] = useState(false);
 
     const handleSend = async () => {
+      if (isSending) return; // Prevent double-sending
+      
       setIsSending(true);
-      await onSend();
-      setIsSending(false);
+      try {
+        await onSend();
+      } catch (error) {
+        console.error('Error sending audio:', error);
+        alert('Failed to send audio message');
+      }
     };
 
     return (
@@ -1478,7 +1499,7 @@ function App() {
             <button
               onClick={handleSend}
               disabled={isSending}
-              className="px-4 py-2 bg-love text-white rounded-lg hover:bg-love/90 disabled:opacity-50"
+              className="px-4 py-2 bg-love text-white rounded-lg hover:bg-love/90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSending ? 'Sending...' : 'Send'}
             </button>
@@ -1488,12 +1509,11 @@ function App() {
     );
   };
 
-  // Add function to handle audio send
+  // Update the handleAudioSend function
   const handleAudioSend = async () => {
     if (!audioPreview?.blob) return;
 
     try {
-      setIsLoading(true);
       const formData = new FormData();
       formData.append('audio', audioPreview.blob, 'audio.webm');
 
@@ -1516,14 +1536,14 @@ function App() {
             type: replyingTo.type
           } : null
         });
+        
+        // Clear states after successful send
         setReplyingTo(null);
+        setAudioPreview(null);
       }
     } catch (error) {
       console.error('Error uploading audio:', error);
-      alert('Failed to upload audio message');
-    } finally {
-      setIsLoading(false);
-      setAudioPreview(null);
+      throw error; // Propagate error to modal for handling
     }
   };
 
