@@ -23,3 +23,10 @@ yarn-error.log*
 # Runtime
 uploads/
 .DS_Store 
+
+ca.crt
+ca.key
+
+cert.crt
+cert.key
+

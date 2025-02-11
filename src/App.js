@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import io from 'socket.io-client';
 import axios from 'axios';
-import { X, ChevronDown, Camera, Image as ImageIcon, Link, MessageSquare, Send, Sticker, Reply, Play, Pause, Mic, StopCircle, Trash2 } from 'lucide-react';
+import { X, ChevronDown,  Image as ImageIcon, Link, MessageSquare, Send, Sticker, Reply, Play, Pause, Mic, StopCircle } from 'lucide-react';
 import './App.css';
 import './styles/patterns.css';
 import debounce from 'lodash/debounce';
@@ -101,6 +101,40 @@ const AudioPlayer = React.memo(({ audioUrl }) => {
 // Add this at the top level, outside of any component
 const IMAGE_CACHE = new Map();
 
+// Add this component at the top level, before App component
+const AudioPreviewModal = React.memo(({ audioUrl, onSend, onCancel }) => {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-sm w-full p-4">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Send Audio Message</h3>
+          <button 
+            onClick={onCancel}
+            className="text-gray-500 hover:text-gray-700"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <AudioPlayer audioUrl={audioUrl} />
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onSend}
+            className="px-4 py-2 bg-love text-white rounded-lg hover:bg-love/90"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function App() {
   const socket = useMemo(() => {
     const socketUrl = process.env.REACT_APP_SOCKET_URL.replace(/^\/\//, 'https://');
@@ -133,9 +167,6 @@ function App() {
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
-  const videoRef = useRef(null);
-  const [showCamera, setShowCamera] = useState(false);
-  const [stream, setStream] = useState(null);
   const [sidebarContent, setSidebarContent] = useState('media');
   const [mediaItems, setMediaItems] = useState({ images: [], videos: [], links: [] });
   const [typingUsers, setTypingUsers] = useState([]);
@@ -157,6 +188,11 @@ function App() {
     const sendAudio = new Audio('/sounds/send.mp3');
     const receiveAudio = new Audio('/sounds/receive.mp3');
     const deleteAudio = new Audio('/sounds/delete.mp3');
+    
+    // Adjust volumes
+    deleteAudio.volume = 0.2;  // Reduced delete sound
+    sendAudio.volume = 0.5;    // Increased send sound
+    receiveAudio.volume = 0.5; // Increased receive sound
     
     return {
       send: () => sendAudio.play().catch(() => {}),
@@ -753,18 +789,23 @@ function App() {
   };
 
   // Update the handleReply function
-  const handleReply = (message) => {
-    // Don't allow replies to deleted messages
-    if (message.type === 'deleted') {
-      return; // Simply return without setting replyingTo
-    }
+  const handleReply = useCallback((message) => {
     setReplyingTo(message);
-  };
+    // Focus the input field after a short delay to ensure state update
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 0);
+  }, []);
 
   // Now define the Message component with access to scrollToMessage
   const Message = React.memo(({ msg, username, onReply, onDelete }) => {
     const [imageLoaded, setImageLoaded] = useState(() => IMAGE_CACHE.has(msg.text));
     const imageRef = useRef(null);
+    const [showCopyFeedback, setShowCopyFeedback] = useState(false);
+    const pressTimeoutRef = useRef(null);
+    const [isPressing, setIsPressing] = useState(false);
 
     useEffect(() => {
       if (msg.type === 'image' && !IMAGE_CACHE.has(msg.text)) {
@@ -783,7 +824,64 @@ function App() {
       }
     }, [msg.type, msg.text]);
 
+    const handleCopyMessage = useCallback(() => {
+      if (msg.type !== 'text' && msg.type !== 'link') return;
+      
+      navigator.clipboard.writeText(msg.text).then(() => {
+        setShowCopyFeedback(true);
+        setTimeout(() => setShowCopyFeedback(false), 2000);
+      });
+    }, [msg]);
+
+    const handlePressStart = useCallback((e) => {
+      if (msg.type !== 'text' && msg.type !== 'link') return;
+      
+      // Prevent default to avoid text selection
+      e.preventDefault();
+      
+      setIsPressing(true);
+      pressTimeoutRef.current = setTimeout(() => {
+        handleCopyMessage();
+        setIsPressing(false);
+      }, 500); // 500ms press duration
+    }, [msg, handleCopyMessage]);
+
+    const handlePressEnd = useCallback(() => {
+      if (pressTimeoutRef.current) {
+        clearTimeout(pressTimeoutRef.current);
+      }
+      setIsPressing(false);
+    }, []);
+
     const renderMessageContent = () => {
+      if (msg.type === 'text' || msg.type === 'link') {
+        return (
+          <div 
+            className={`relative ${isPressing ? 'bg-black/5' : ''} transition-colors rounded`}
+            onTouchStart={handlePressStart}
+            onTouchEnd={handlePressEnd}
+            onTouchCancel={handlePressEnd}
+            onMouseDown={handlePressStart}
+            onMouseUp={handlePressEnd}
+            onMouseLeave={handlePressEnd}
+          >
+            <span className="font-inter text-[15px] leading-relaxed">
+              {msg.text}
+            </span>
+            
+            {/* Copy feedback tooltip */}
+            {showCopyFeedback && (
+              <div 
+                className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white 
+                  px-2 py-1 rounded text-xs whitespace-nowrap animate-fade-in-out"
+              >
+                Copied to clipboard!
+              </div>
+            )}
+          </div>
+        );
+      }
+      
       if (msg.type === 'image') {
         return (
           <div className="relative rounded-lg overflow-hidden bg-gray-100">
@@ -809,15 +907,32 @@ function App() {
         );
       }
       
+      if (msg.type === 'sticker' || msg.type === 'custom-sticker') {
+        return (
+          <div className="relative w-32 h-32">
+            <img
+              src={msg.text}
+              alt="sticker"
+              className="w-full h-full object-contain"
+              loading="lazy"
+              style={{ 
+                transform: 'translateZ(0)',
+                backfaceVisibility: 'hidden'
+              }}
+            />
+          </div>
+        );
+      }
+      
       if (msg.type === 'deleted') {
-        return <span className="italic text-gray-500">This message was deleted</span>;
+        return <span className="italic text-gray-500 font-inter">This message was deleted</span>;
       }
       
       if (msg.type === 'audio') {
         return <AudioPlayer audioUrl={msg.text} />;
       }
       
-      return <span>{msg.text}</span>;
+      return <span className="font-inter text-[15px] leading-relaxed">{msg.text}</span>;
     };
 
     const handlers = useSwipeable({
@@ -857,113 +972,135 @@ function App() {
     const isDeleted = msg.type === 'deleted';
 
     return (
-      <div
+      <div 
         {...handlers}
-        className={`flex ${msg.username === username ? 'justify-end' : 'justify-start'} w-full mb-2 sm:mb-3 px-4 sm:px-8`}
-        style={{ 
-          transform: 'translateZ(0)',
-          willChange: 'transform',
-          contain: 'layout style paint'
-        }}
+        data-message-id={msg._id}
+        className={`flex ${msg.username === username ? 'justify-end' : 'justify-start'} w-full mb-2.5 sm:mb-3.5 px-4 sm:px-8`}
       >
-        <div 
-          onClick={handleMessageClick}
-          data-message-id={msg._id}
-          className={`relative max-w-[88%] xs:max-w-[85%] sm:max-w-[75%] group
-            ${msg.username === username ? 'message-gradient' : 'message-white'} 
-            rounded-xl sm:rounded-2xl p-2.5 sm:p-3 shadow-lg transition-transform duration-200`}
-        >
-          {/* Reply Preview */}
+        <div className={`relative max-w-[85%] ${msg.username === username ? 'items-end' : 'items-start'} group`}>
+          {/* Reply preview if message is a reply */}
           {msg.replyTo && (
             <div 
-              className={`
-                relative mb-2 p-2 rounded-lg cursor-pointer overflow-hidden
-                ${msg.username === username ? 'reply-preview' : 'reply-preview-light'}
-              `}
+              className={`mb-2 ${
+                msg.username === username ? 'text-right' : 'text-left'
+              } group/reply overflow-hidden`}
             >
-              <div className="relative z-10">
-                <div className={`text-xs ${msg.username === username ? 'text-white/90' : 'text-gray-500'}`}>
-                  Replying to {msg.replyTo.username}
+              <div 
+                onClick={(e) => {
+                  // Stop event from bubbling up to prevent parent click handler
+                  e.stopPropagation();
+                  
+                  // Find and scroll to original message
+                  const originalMessage = document.querySelector(`[data-message-id="${msg.replyTo.id}"]`);
+                  if (!originalMessage || !chatContainerRef.current) return;
+
+                  chatContainerRef.current.scrollTo({
+                    top: originalMessage.offsetTop - chatContainerRef.current.clientHeight / 3,
+                    behavior: 'smooth'
+                  });
+
+                  originalMessage.classList.add('highlight-message');
+                  setTimeout(() => {
+                    originalMessage.classList.remove('highlight-message');
+                  }, 2000);
+                }}
+                className={`inline-block rounded-lg px-3 py-2 
+                  ${msg.username === username 
+                    ? 'bg-love/10 text-love hover:bg-love/15' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  } cursor-pointer transition-colors max-w-full`}
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <svg 
+                    xmlns="http://www.w3.org/2000/svg" 
+                    className="h-3.5 w-3.5 opacity-70 flex-shrink-0"
+                    viewBox="0 0 20 20" 
+                    fill="currentColor"
+                  >
+                    <path 
+                      fillRule="evenodd" 
+                      d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" 
+                      clipRule="evenodd" 
+                    />
+                  </svg>
+                  <span className="font-medium truncate">{msg.replyTo.username}</span>
                 </div>
-                <div className="mt-1 text-sm truncate flex items-center gap-1.5">
+                <div className="opacity-75 truncate pl-5 w-full">
                   {msg.replyTo.type === 'sticker' ? (
-                    <div className="w-4 h-4">
-                      <img 
-                        src={msg.replyTo.text} 
-                        alt="sticker"
-                        className="w-full h-full object-contain"
-                      />
+                    <div className="flex items-center gap-1.5">
+                      <Sticker className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="truncate">Sticker</span>
                     </div>
                   ) : msg.replyTo.type === 'image' ? (
-                    <span className="flex items-center gap-1">
-                      <ImageIcon className="w-3 h-3" />
-                      Photo
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>Photo</span>
+                    </div>
                   ) : msg.replyTo.type === 'audio' ? (
-                    <span className="flex items-center gap-1">
-                      <Mic className="w-3 h-3" />
-                      Audio Message
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Mic className="w-3.5 h-3.5" />
+                      <span>Voice message</span>
+                    </div>
                   ) : (
-                    <span className={msg.username === username ? 'text-white/90' : 'text-gray-600'}>
-                      {msg.replyTo.text}
-                    </span>
+                    <span className="line-clamp-1">{msg.replyTo.text}</span>
                   )}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Message Header */}
-          <div className="flex justify-between items-center text-xs sm:text-sm mb-1">
-            <span className={`font-medium ${msg.username === username ? 'text-white/95' : 'text-gray-900'}`}>
-              {msg.username}
-            </span>
-            <span className={`text-[10px] sm:text-xs ml-2 ${msg.username === username ? 'text-white/80' : 'text-gray-500'}`}>
+          {/* Rest of your existing message component */}
+          <div className="text-sm mb-1 flex items-center gap-1.5">
+            <span className="font-medium font-inter text-gray-700">{msg.username}</span>
+            <span className="text-xs text-gray-400 font-inter">
               {new Date(msg.timestamp).toLocaleTimeString([], { 
                 hour: '2-digit', 
                 minute: '2-digit' 
               })}
             </span>
           </div>
-
-          {/* Message Content */}
-          <div className="min-w-0">
-            {renderMessageContent()}
-          </div>
-
-          {/* Action Buttons - Updated visibility for mobile/desktop */}
-          {!isDeleted && (
-            <div className="absolute -left-12 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 
-              group-hover:opacity-100 
-              md:group-hover:opacity-100 
-              md:opacity-0
-              sm:group-hover:opacity-100 
-              active:opacity-100 
-              transition-opacity
-              touch-device:hidden"
+          
+          <div 
+            className={`p-3 shadow-sm relative ${
+              msg.username === username 
+                ? 'bg-love text-white rounded-[20px] rounded-tr-[5px]' 
+                : 'bg-white border border-gray-100 text-gray-800 rounded-[20px] rounded-tl-[5px]'
+            }`}
+          >
+            {/* Message Actions */}
+            <div className={`absolute ${msg.username === username ? 'left-0' : 'right-0'} top-1/2 -translate-y-1/2 
+              ${msg.username === username ? '-translate-x-full' : 'translate-x-full'} 
+              opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-1 px-2`}
             >
-              {msg.type !== 'deleted' && username === msg.username && (
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onReply(msg);
-                  }}
-                  className="p-2 bg-white rounded-full shadow-md hover:bg-gray-50"
+              {/* Reply Button - Don't show for deleted messages */}
+              {msg.type !== 'deleted' && (
+                <button
+                  onClick={() => onReply(msg)}
+                  className="p-1.5 rounded-full bg-white shadow-md hover:bg-gray-50 transition-colors"
+                  title="Reply"
                 >
-                  <Reply className="w-4 h-4 text-gray-500" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a7 7 0 017 7v2a1 1 0 11-2 0v-2a5 5 0 00-5-5H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
                 </button>
               )}
-              {msg.username === username && (
-                <button 
-                  onClick={handleDelete}
-                  className="p-2 bg-white rounded-full shadow-md hover:bg-red-50"
+
+              {/* Delete Button - Only show for user's own messages */}
+              {msg.username === username && msg.type !== 'deleted' && (
+                <button
+                  onClick={() => onDelete(msg._id)}
+                  className="p-1.5 rounded-full bg-white shadow-md hover:bg-gray-50 transition-colors"
+                  title="Delete"
                 >
-                  <Trash2 className="w-4 h-4 text-red-500" />
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
                 </button>
               )}
             </div>
-          )}
+
+            {renderMessageContent()}
+          </div>
         </div>
       </div>
     );
@@ -1132,7 +1269,20 @@ function App() {
         return newRecent;
       });
 
-      onSelect(stickerText);
+      // Create message data
+      const messageData = {
+        username,
+        text: stickerText,
+        type: 'sticker',
+        timestamp: new Date(),
+        replyTo: replyingTo || null
+      };
+
+      // Send sticker message
+      socket.emit('sendMessage', messageData);
+      playSound.send();
+      setShowStickers(false);
+      setReplyingTo(null);
     };
 
     return (
@@ -1305,106 +1455,42 @@ function App() {
     setUsername('');
   };
 
-  const CameraModal = () => {
-    return (
-      <div className="fixed inset-0 bg-black/90 z-50 flex flex-col">
-        {/* Camera Header */}
-        <div className="p-4 flex justify-between items-center">
-          <button 
-            onClick={() => {
-              stopCamera();
-              setShowCamera(false);
-            }}
-            className="text-white p-2 hover:bg-white/10 rounded-full"
-          >
-            <X className="w-6 h-6" />
-          </button>
-          <span className="text-white font-medium">Take Photo</span>
-          <div className="w-10" /> {/* Spacer for alignment */}
-        </div>
+  // Add these functions inside your App component
+  const handleAudioSend = useCallback(async () => {
+    if (!audioPreview) return;
 
-        {/* Camera Preview */}
-        <div className="flex-1 flex items-center justify-center">
-          <video
-            ref={videoRef}
-            autoPlay
-            playsInline
-            className="max-h-full max-w-full object-contain"
-          />
-        </div>
-
-        {/* Camera Controls */}
-        <div className="p-6 flex justify-center">
-          <button
-            onClick={handleCameraStart}
-            className="w-16 h-16 rounded-full bg-white flex items-center justify-center"
-            aria-label="Take photo"
-          >
-            <div className="w-14 h-14 rounded-full border-4 border-love" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // First, memoize the subscribeToNotifications function
-  const subscribeToNotifications = useCallback(async () => {
     try {
-      if ('serviceWorker' in navigator && 'PushManager' in window) {
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: process.env.REACT_APP_VAPID_PUBLIC_KEY
-        });
+      const formData = new FormData();
+      formData.append('audio', audioPreview.blob, 'audio.webm');
 
-        // Send subscription to server
-        await axios.post(`${API_URL}/api/subscribe`, {
-          subscription,
-          username
-        });
+      const response = await axios.post(`${API_URL}/api/upload-audio`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
 
-        console.log('Successfully subscribed to push notifications');
-      }
-    } catch (error) {
-      console.error('Error subscribing to notifications:', error);
-    }
-  }, [username]);
-
-  // Then update the useEffect
-  useEffect(() => {
-    if (isLoggedIn) {
-      subscribeToNotifications();
-    }
-  }, [isLoggedIn, subscribeToNotifications]);
-
-  // Add this effect to handle selected stickers
-  useEffect(() => {
-    if (selectedSticker) {
       const messageData = {
-        type: 'sticker',
-        text: selectedSticker,
-        username: username,
+        username,
+        text: response.data.url,
+        type: 'audio',
         timestamp: new Date(),
-        replyTo: replyingTo ? {
-          _id: replyingTo._id,
-          username: replyingTo.username,
-          text: replyingTo.text,
-          type: replyingTo.type
-        } : null
+        replyTo: replyingTo || null
       };
-      socket.emit('sendMessage', messageData);
-      setSelectedSticker(null);
-    setShowStickers(false);
-      setReplyingTo(null);
-    }
-  }, [selectedSticker, username, socket, replyingTo]);
 
-  const renderMessages = useMemo(() => {
-    if (!Array.isArray(messages)) return null;
-    
-    return messages.map((msg, index) => (
-      <Message 
-        key={msg._id || index}
+      socket.emit('sendMessage', messageData);
+      playSound.send();
+      setReplyingTo(null);
+    } catch (error) {
+      console.error('Error uploading audio:', error);
+      alert('Failed to upload audio');
+    } finally {
+      URL.revokeObjectURL(audioPreview.url);
+      setAudioPreview(null);
+    }
+  }, [audioPreview, username, replyingTo, socket, playSound]);
+
+  const renderMessages = useCallback(() => {
+    return messages.map(msg => (
+      <Message
+        key={msg._id}
         msg={msg}
         username={username}
         onReply={handleReply}
@@ -1413,147 +1499,18 @@ function App() {
     ));
   }, [messages, username, handleReply, handleDeleteMessage]);
 
-  // Update the AudioPreviewModal component
-  const AudioPreviewModal = ({ audioUrl, onSend, onCancel }) => {
-    const [isSending, setIsSending] = useState(false);
-
-    const handleSend = async () => {
-      if (isSending) return;
-      setIsSending(true);
-      try {
-        await onSend();
-      } catch (error) {
-        console.error('Error sending audio:', error);
-        alert('Failed to send audio message');
+  useEffect(() => {
+    return () => {
+      // Cleanup image previews when component unmounts
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+      // Clear image cache if it gets too large
+      if (IMAGE_CACHE.size > 100) {
+        IMAGE_CACHE.clear();
       }
     };
-
-    return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-40 p-4">
-        <div className="bg-white rounded-xl max-w-sm w-full p-4 relative">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold">Send Voice Message</h3>
-            <button 
-              onClick={onCancel}
-              className="text-gray-500 hover:text-gray-700"
-              disabled={isSending}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          
-          <div className="mb-4">
-            <AudioPlayer audioUrl={audioUrl} />
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={onCancel}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
-              disabled={isSending}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSend}
-              disabled={isSending}
-              className="px-4 py-2 bg-love text-white rounded-lg hover:bg-love/90 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSending ? 'Sending...' : 'Send'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Update the handleAudioSend function
-  const handleAudioSend = async () => {
-    if (!audioPreview?.blob) return;
-
-    try {
-      const formData = new FormData();
-      formData.append('audio', audioPreview.blob, 'audio.webm');
-
-      const response = await axios.post(`${API_URL}/api/upload-audio`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      if (response.data.url) {
-        socket.emit('sendMessage', {
-          type: 'audio',
-          text: response.data.url,
-          username: username,
-          timestamp: new Date(),
-          replyTo: replyingTo ? {
-            _id: replyingTo._id,
-            username: replyingTo.username,
-            text: replyingTo.text,
-            type: replyingTo.type
-          } : null
-        });
-        
-        // Clear states after successful send
-        setReplyingTo(null);
-        setAudioPreview(null);
-      }
-    } catch (error) {
-      console.error('Error uploading audio:', error);
-      throw error; // Propagate error to modal for handling
-    }
-  };
-
-  // Add this function to fetch message history
-  const fetchMessageHistory = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/api/messages/history`);
-      setMessages(response.data);
-    } catch (error) {
-      console.error('Error fetching message history:', error);
-    }
-  };
-
-  // Add error boundaries
-  window.addEventListener('unhandledrejection', (event) => {
-    console.error('Unhandled promise rejection:', event.reason);
-  });
-
-  // Add offline handling
-  window.addEventListener('offline', () => {
-    alert('You are offline. Please check your internet connection.');
-  });
-
-  // Add reconnection handling
-  socket.on('connect_error', () => {
-    console.log('Attempting to reconnect...');
-  });
-
-  // Add these camera-related functions at the component level
-  const stopCamera = useCallback(() => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  }, [stream]);
-
-  const handleCameraStart = useCallback(async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      setStream(mediaStream);
-      setShowCamera(true);
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-      alert('Unable to access camera');
-    }
-  }, []);
+  }, [imagePreview]);
 
   if (!isLoggedIn) {
     return (
@@ -1638,7 +1595,7 @@ function App() {
         <div className="h-full max-w-6xl mx-auto w-full p-2 sm:p-4 pb-[25px] sm:pb-[30px] absolute inset-0">
           <div 
             ref={chatContainerRef}
-            className="h-full overflow-y-auto overscroll-y-contain"
+            className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain"
             style={{ 
               WebkitOverflowScrolling: 'touch',
               transform: 'translateZ(0)',
@@ -1652,7 +1609,7 @@ function App() {
                 <div className="w-6 h-6 border-2 border-love border-t-transparent rounded-full animate-spin" />
                 </div>
             )}
-            {renderMessages}
+            {renderMessages()}
           </div>
         </div>
       </div>
@@ -1686,18 +1643,24 @@ function App() {
       )}
 
       {/* Input area */}
-      <div className="sticky bottom-0 bg-white border-t shadow-lg z-25">
+      <div className="sticky bottom-0 bg-white border-t shadow-lg z-25 overflow-hidden">
         <div className="max-w-6xl mx-auto px-2 sm:px-4 py-2">
           <div className="flex flex-col gap-2">
-            {/* Input area */}
             <div className="flex items-end gap-2">
-              {/* Camera button - moved to left */}
+              {/* Image upload button - moved to left */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleImageSelect}
+                accept="image/*"
+                className="hidden"
+              />
               <button
-                onClick={handleCameraStart}
+                onClick={() => fileInputRef.current?.click()}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                title="Take Photo"
+                title="Upload Image"
               >
-                <Camera className="w-5 h-5 text-gray-500" />
+                <ImageIcon className="w-5 h-5 text-gray-500" />
               </button>
 
               {/* Text input field */}
@@ -1720,21 +1683,6 @@ function App() {
 
               {/* Right side action buttons */}
               <div className="flex items-center gap-1 sm:gap-2">
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageSelect}
-                  accept="image/*"
-                  className="hidden"
-                />
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                  title="Upload Image"
-                >
-                  <ImageIcon className="w-5 h-5 text-gray-500" />
-                </button>
-
                 <button
                   onClick={() => setShowStickers(!showStickers)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1842,9 +1790,6 @@ function App() {
           </div>
         </div>
       )}
-
-      {/* Camera Modal */}
-      {showCamera && <CameraModal />}
 
       {/* Reply preview */}
       {replyingTo && (

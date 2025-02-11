@@ -24,6 +24,9 @@ module.exports = {
           '50%': { transform: 'translateY(-10px)' },
         },
       },
+      fontFamily: {
+        'inter': ['Inter', 'system-ui', 'sans-serif'],
+      },
     },
   },
   plugins: [],
